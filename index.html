@@ -74,8 +74,8 @@
   .slider-dots{display:flex;gap:8px}
   .slider-dots button{width:8px;height:8px;border-radius:50%;border:none;background:rgba(255,255,255,.35);cursor:pointer;padding:0}
   .slider-dots button.active{background:#fff;width:22px;border-radius:4px;transition:width .3s ease}
-  .scroll-hint{position:absolute;bottom:36px;right:6%;z-index:10;font-size:11px;letter-spacing:.1em;color:rgba(255,255,255,.5);text-transform:uppercase;animation:hint-bounce 1.6s ease-in-out infinite}
-  @keyframes hint-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(5px)}}
+  .scroll-hint{position:absolute;bottom:36px;right:6%;z-index:10;font-size:11px;letter-spacing:.1em;color:rgba(255,255,255,.5);text-transform:uppercase;animation:hint-nudge 1.6s ease-in-out infinite}
+  @keyframes hint-nudge{0%,100%{transform:translateY(0)}50%{transform:translateY(5px)}}
 
   section{padding:100px 0}
   .section-head{max-width:600px;margin-bottom:48px}
