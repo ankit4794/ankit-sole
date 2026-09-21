@@ -45,10 +45,11 @@
   nav.links a:hover{opacity:1}
   .nav-toggle{display:none;background:none;border:none;font-size:22px;cursor:pointer;color:#fff}
 
-  /* ================= HERO — Coffee Drift sneaker slider ================= */
-  .slider{position:relative;height:100vh;min-height:640px;overflow:hidden;background:#111}
-  .slide{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none}
-  .slide.is-active{opacity:1;pointer-events:auto}
+  /* ================= HERO — Coffee Drift sneaker slider, scroll-scrubbed ================= */
+  .slider-track{position:relative;height:520vh}
+  .slider{position:sticky;top:0;height:100vh;min-height:640px;overflow:hidden;background:#111}
+  .slide{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;visibility:hidden}
+  .slide.is-active{visibility:visible}
   .slide-bgtext{position:absolute;top:50%;left:50%;transform:translate(-50%,-52%);font-size:min(24vw,300px);font-weight:900;letter-spacing:-0.03em;color:rgba(0,0,0,.14);white-space:nowrap;user-select:none;z-index:1}
   .slide[data-light-ui] .slide-bgtext{color:rgba(0,0,0,.12)}
   .slide:not([data-light-ui]) .slide-bgtext{color:rgba(255,255,255,.14)}
@@ -73,7 +74,8 @@
   .slider-dots{display:flex;gap:8px}
   .slider-dots button{width:8px;height:8px;border-radius:50%;border:none;background:rgba(255,255,255,.35);cursor:pointer;padding:0}
   .slider-dots button.active{background:#fff;width:22px;border-radius:4px;transition:width .3s ease}
-  .scroll-hint{position:absolute;top:30px;right:6%;z-index:10;font-size:11px;letter-spacing:.1em;color:rgba(255,255,255,.5);text-transform:uppercase}
+  .scroll-hint{position:absolute;bottom:36px;right:6%;z-index:10;font-size:11px;letter-spacing:.1em;color:rgba(255,255,255,.5);text-transform:uppercase;animation:hint-bounce 1.6s ease-in-out infinite}
+  @keyframes hint-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(5px)}}
 
   section{padding:100px 0}
   .section-head{max-width:600px;margin-bottom:48px}
@@ -167,8 +169,9 @@
 
 <main id="top">
   <h1 class="sr-only">ANKIT SOLE — cinematic sneaker showcase</h1>
+  <div class="slider-track" id="sliderTrack">
   <section class="slider" id="slider">
-    <div class="scroll-hint">Scroll for the collection ↓</div>
+    <div class="scroll-hint">Scroll ↓</div>
 
     <!-- Slide 1 -->
     <div class="slide is-active" data-i="0" data-color="#B4231F" style="background:#B4231F">
@@ -261,6 +264,7 @@
       <button class="slider-arrow" id="nextSlide">›</button>
     </div>
   </section>
+  </div>
 
   <section id="collection">
     <div class="wrap">
@@ -397,88 +401,109 @@
 <script type="module">
   import { animate, inView } from "https://cdn.jsdelivr.net/npm/motion@11.15.0/+esm";
   import gsap from "https://cdn.jsdelivr.net/npm/gsap@3.12.5/+esm";
+  import ScrollTrigger from "https://cdn.jsdelivr.net/npm/gsap@3.12.5/ScrollTrigger.js/+esm";
+  gsap.registerPlugin(ScrollTrigger);
 
   /* =========================================================
-     COFFEE DRIFT — three-layer cinematic slider
+     COFFEE DRIFT — three-layer cinematic slider, SCROLL-SCRUBBED
+     (matches the reference build's mechanism: a sticky-pinned stage
+     inside a tall track, with a GSAP master timeline whose progress
+     is driven directly by scroll position via ScrollTrigger scrub —
+     not click-triggered discrete transitions.)
      Layer 1: the product (shoe) spins out / spins in
      Layer 2: the background word flips on the Y axis
-     Layer 3: floating detail parts ghost-clone drift
+     Layer 3: floating detail parts drift out / in
      Technique recreated from the Doc Mo "Coffee Drift" system
      (originally built for a coffee brand, reused here for shoes)
      with original assets, names and copy.
   ========================================================= */
   const slides = Array.from(document.querySelectorAll('.slide'));
   const dots = Array.from(document.querySelectorAll('#sliderDots button'));
-  let current = 0;
-  let locked = false;
-  const LOCK_MS = 1100;
+  const HOLD = 0.8, TRANS = 0.6, CELL = HOLD + TRANS;
+  const holdMidpoints = slides.map((_, i) => i * CELL + HOLD / 2);
+  const totalDuration = (slides.length - 1) * CELL + HOLD;
 
-  function goTo(nextIndex) {
-    if (locked) return;
-    const dir = nextIndex > current || (current === slides.length - 1 && nextIndex === 0) ? 1 : -1;
-    nextIndex = (nextIndex + slides.length) % slides.length;
-    if (nextIndex === current) return;
-    locked = true;
+  // initial state: slide 0 settled and visible, the rest staged off-screen
+  slides.forEach((slide, i) => {
+    const shoe = slide.querySelector('.shoe-stage');
+    const text = slide.querySelector('.slide-bgtext');
+    const floats = slide.querySelectorAll('.float-part');
+    if (i === 0) {
+      gsap.set(slide, { autoAlpha: 1 });
+      gsap.set(shoe, { x: 0, rotate: 0 });
+      gsap.set(text, { rotationY: 0, opacity: 1 });
+      gsap.set(floats, { opacity: 1, x: 0, y: 0 });
+    } else {
+      gsap.set(slide, { autoAlpha: 0 });
+      gsap.set(shoe, { x: 700, rotate: 260 });
+      gsap.set(text, { rotationY: -55, opacity: 0, transformPerspective: 800 });
+      gsap.set(floats, { opacity: 0, x: -150 });
+    }
+  });
 
-    const outgoing = slides[current];
-    const incoming = slides[nextIndex];
+  const master = gsap.timeline({ paused: true, defaults: { ease: 'none' } });
+  for (let i = 0; i < slides.length - 1; i++) {
+    const transStart = i * CELL + HOLD;
+    const cur = slides[i], next = slides[i + 1];
+    const curShoe = cur.querySelector('.shoe-stage'), nextShoe = next.querySelector('.shoe-stage');
+    const curText = cur.querySelector('.slide-bgtext'), nextText = next.querySelector('.slide-bgtext');
+    const curFloats = cur.querySelectorAll('.float-part'), nextFloats = next.querySelectorAll('.float-part');
 
-    // Layer 1 — shoe spins out / spins in
-    const outShoe = outgoing.querySelector('.shoe-stage');
-    const inShoe = incoming.querySelector('.shoe-stage');
-    gsap.timeline()
-      .to(outShoe, { x: -20 * dir, duration: 0.14, ease: "power1.in" })
-      .to(outShoe, { x: 900 * dir, rotate: 290 * dir, duration: 0.6, ease: "back.in(0.8)" }, ">-0.02");
-    gsap.set(inShoe, { x: -900 * dir, rotate: -290 * dir });
-    gsap.to(inShoe, { x: 0, rotate: 0, duration: 0.7, ease: "power4.inOut", delay: 0.18 });
+    // outgoing: shoe spins away, text flips edge-on, floats drift off
+    master.to(curShoe, { x: -700, rotate: -260, duration: TRANS, ease: 'power2.in' }, transStart);
+    master.to(curText, { rotationY: 55, opacity: 0, duration: TRANS * 0.8, ease: 'power1.in' }, transStart);
+    master.to(curFloats, { opacity: 0, x: 150, stagger: 0.02, duration: TRANS * 0.7 }, transStart);
+    master.set(cur, { autoAlpha: 0 }, transStart + TRANS - 0.01);
 
-    // Layer 2 — background word flips on Y axis
-    const outText = outgoing.querySelector('.slide-bgtext');
-    const inText = incoming.querySelector('.slide-bgtext');
-    gsap.to(outText, { rotationY: 60 * dir, opacity: 0, duration: 0.55, ease: "back.in(0.8)", transformPerspective: 800 });
-    gsap.set(inText, { rotationY: -60 * dir, opacity: 0, transformPerspective: 800 });
-    gsap.to(inText, { rotationY: 0, opacity: 1, duration: 0.7, ease: "power4.inOut", delay: 0.18 });
-
-    // Layer 3 — floating parts ghost-clone drift (offset duration so all layers land together)
-    const outFloats = outgoing.querySelectorAll('.float-part');
-    const inFloats = incoming.querySelectorAll('.float-part');
-    outFloats.forEach((el, i) => {
-      gsap.to(el, { x: 260 * dir, y: -40, opacity: 0, rotate: 40 * dir, duration: 0.75, ease: "back.in(2)", delay: i * 0.03 });
-    });
-    inFloats.forEach((el, i) => {
-      gsap.set(el, { x: -260 * dir, y: 40, opacity: 0 });
-      gsap.to(el, { x: 0, y: 0, opacity: 1, duration: 0.85, ease: "power4.inOut", delay: 0.22 + i * 0.04 });
-    });
-
-    outgoing.style.zIndex = 1;
-    incoming.style.zIndex = 2;
-    incoming.classList.add('is-active');
-
-    setTimeout(() => {
-      outgoing.classList.remove('is-active');
-      gsap.set([outShoe, outText, ...outFloats], { clearProps: "all" });
-      current = nextIndex;
-      dots.forEach((d) => d.classList.remove('active'));
-      dots[current].classList.add('active');
-      locked = false;
-    }, LOCK_MS);
+    // incoming: pre-rotated shoe unwinds in, text unfolds, floats fly in
+    master.set(next, { autoAlpha: 1 }, transStart);
+    master.fromTo(nextShoe, { x: 700, rotate: 260 }, { x: 0, rotate: 0, duration: TRANS, ease: 'power2.out' }, transStart);
+    master.fromTo(nextText, { rotationY: -55, opacity: 0 }, { rotationY: 0, opacity: 1, duration: TRANS * 0.8, ease: 'power1.out' }, transStart + TRANS * 0.15);
+    master.fromTo(nextFloats, { opacity: 0, x: -150 }, { opacity: 1, x: 0, stagger: 0.02, duration: TRANS * 0.7 }, transStart + TRANS * 0.25);
   }
 
-  document.getElementById('nextSlide').addEventListener('click', () => goTo(current + 1));
-  document.getElementById('prevSlide').addEventListener('click', () => goTo(current - 1));
-  dots.forEach((d) => d.addEventListener('click', () => goTo(Number(d.dataset.i))));
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowRight') goTo(current + 1);
-    if (e.key === 'ArrowLeft') goTo(current - 1);
+  const slideST = ScrollTrigger.create({
+    trigger: '#sliderTrack',
+    start: 'top top',
+    end: 'bottom bottom',
+    scrub: 0.6,
+    animation: master,
+    onUpdate: (self) => {
+      const t = self.progress * totalDuration;
+      let idx = 0, best = Infinity;
+      holdMidpoints.forEach((m, i) => { const d = Math.abs(t - m); if (d < best) { best = d; idx = i; } });
+      dots.forEach((d) => d.classList.remove('active'));
+      dots[idx].classList.add('active');
+    }
   });
-  // swipe on mobile
-  let touchStartX = 0;
-  const sliderEl = document.getElementById('slider');
-  sliderEl.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; }, { passive: true });
-  sliderEl.addEventListener('touchend', (e) => {
-    const dx = e.changedTouches[0].clientX - touchStartX;
-    if (Math.abs(dx) > 50) goTo(current + (dx < 0 ? 1 : -1));
-  }, { passive: true });
+
+  // fade the scroll hint out over the first bit of scroll
+  gsap.to('.scroll-hint', {
+    opacity: 0,
+    scrollTrigger: { trigger: '#sliderTrack', start: 'top top', end: '+=250', scrub: true }
+  });
+
+  // arrows/dots smooth-scroll to the target slide's hold point (they nudge scroll, matching the reference)
+  function scrollToSlide(i) {
+    i = Math.max(0, Math.min(slides.length - 1, i));
+    const targetProgress = holdMidpoints[i] / totalDuration;
+    const y = slideST.start + targetProgress * (slideST.end - slideST.start);
+    window.scrollTo({ top: y, behavior: 'smooth' });
+  }
+  function currentIndex() {
+    const t = slideST.animation.progress() * totalDuration;
+    let idx = 0, best = Infinity;
+    holdMidpoints.forEach((m, i) => { const d = Math.abs(t - m); if (d < best) { best = d; idx = i; } });
+    return idx;
+  }
+  document.getElementById('nextSlide').addEventListener('click', () => scrollToSlide(currentIndex() + 1));
+  document.getElementById('prevSlide').addEventListener('click', () => scrollToSlide(currentIndex() - 1));
+  dots.forEach((d) => d.addEventListener('click', () => scrollToSlide(Number(d.dataset.i))));
+  document.addEventListener('keydown', (e) => {
+    if (document.activeElement && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+    if (e.key === 'ArrowRight') scrollToSlide(currentIndex() + 1);
+    if (e.key === 'ArrowLeft') scrollToSlide(currentIndex() - 1);
+  });
 
   // ---- smooth scroll for in-page links only ----
   document.querySelectorAll('a[href^="#"]').forEach((link) => {
